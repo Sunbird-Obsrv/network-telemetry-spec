@@ -223,3 +223,557 @@ Following is a sample telemetry envelope structure for an API event
   }
 ]
 ```
+## Event Definitions
+
+Before we delve into the detailed structures for all the events, we would define the common structures that are recurring across all events and that are part of OpenTelemetry protocol itself
+
+### Attribute
+
+Attribute is a recurring structure across OTel protocol to capture a key and value. 
+
+```scala
+"attributes": [Attribute]
+
+Attribute = {
+  "key": String, // Required. Key for the attribute
+  "value": { // Required. Value of the attribute. One of string, boolean, int, double, array, kv
+    "stringValue": String // Attribute to capture string value
+    "boolValue": Boolean  // Attribute to capture boolean value
+    "intValue": Int       // Attribute to capture integer value
+    "doubleValue": Double // Attribute to capture double value
+    "arrayValue": {       // Attribute to capture array value
+      "values": [{"stringValue": String}] // The value can only be string, boolean, int or double
+    }
+    "kvlistValue": {      // Attribute to capture map attributes value
+      "values": [ // The value within map can be string, boolean, int or double
+        {"key": String, "value": {"stringValue": String}}
+      ]
+    }                     
+  }
+}
+
+// For all attributes across the spec we follow the below usage
+Attribute(key, valueType)
+
+```
+
+### API
+API event is used by Network participants to share API data with the network facilitator/manager. API event contains API transport data, including the API URL, correlation identifiers for mapping multiple interconnected API calls, and response metadata like status codes and error details.
+
+We will be using the OTel “TRACE” signal to capture the API event. Since the OTel spec is open-ended, we would enforce certain attributes as mandatory and some recommend some optional attributes as part of the network telemetry specification.
+
+Following is the overall structure:
+
+```scala
+{
+ "resourceSpans": [{
+   "resource": { // Required. Contextual information as per envelope structure
+     Attribute("eid", String), // Required. Event ID - must be API for all api events
+     Attribute("producer", String), // Required. Identifier of the system that produced this event
+     Attribute("domain", String), // Required. Domain where the event has occurred.
+   }, 
+   "scopeSpans": [{
+     "scope": { // Optional. Contextual information as per envelope structure
+       "name": String, 
+       "version": String, 
+       "attributes": [
+         Attribute("scope_uuid", String), // Optional. unique id for the batch for idempotency
+         Attribute("checksum", String), // Optional. checksum to enable tampering checks
+         Attribute("count", String), // Optional. Total count of spans in this batch 
+         Attribute("schema_url", String), // Optional. Schema URL for schema validation
+       ]
+     },
+     "spans": [{ // Required. One or more API events in detail
+       "name": String, // Required. API Name
+       "traceId": String, // Required. Unique ID of the entire transaction
+       "spanId": String, // Required. Unique ID of the API event call
+       "parentSpanId": String, // Optional. Parent span id for correlation
+       "startTimeUnixNano": String, // Required. Start time of the API call in nano-seconds
+       "endTimeUnixNano": String, // Required. End time of the API call in nano-seconds
+       "status": String, // Required. one of Unset, Error, Ok
+       "kind": String, // Optional. one of Client, Server, Internal, Producer, or Consumer
+       "attributes": [ // Required. List of attributes providing additional details about the span
+         Attribute("span_uuid", String), // Required. Unique identifier for this span record
+         Attribute("observedTimeUnixNano", String), // Required. Event generated time as ISO datetime
+         Attribute("sender.id", String), // Required. Identifier of the system initiated the API call
+         Attribute("recipient.id", String), // Required. Identifier of the system that is expected to be the recipient of the API call
+         Attribute("http.method", String), // Required. Http method one of GET/POST/PATCH/DELETE etc
+         Attribute("http.server_name", String), // Optional. Server name if any
+         Attribute("http.route", String), // Required. URL of the request
+         Attribute("http.user_agent", String), // Optional. User agent information
+         Attribute("http.scheme", String), // Optional. Is the call http or https
+         Attribute("http.host", String), // Required. Host ip or domain name
+         Attribute("http.flavor", String), // Optional. HTTP flavor
+         Attribute("http.status.code", Int), // Required. Status code of the API call
+       ],
+       "events": [{ // Optional. Capture additional API specific data like errors, req & res data, or multiple events that occurred during the API processing
+         "name": String, // Required. Name of the additional data or event
+         "time": String, // Required. Event time as ISO datetime
+         "attributes": [Attribute] // Optional. List of attributes 
+       }]
+     }]
+   }]
+ }]
+}
+```
+
+#### Example
+
+```scala
+{
+ "resourceSpans": [{
+   "resource": { 
+     "attributes": [
+       {"key": "eid", "value": {"stringValue": "API"}},
+       {"key": "producer", "value": {"stringValue": "bap-1234"}},
+       {"key": "domain", "value": {"stringValue": "Retail"}},
+       {"key": "deviceid", "value": {"stringValue": "45ba-8f9f-6f8e756b7513"}} // Custom attribute
+     ]
+   }, 
+   "scopeSpans": [{
+     "scope": {
+       "name": "discovery_service",
+       "version": "1.0",
+       "attributes": [
+         {"key":"scope_uuid","value": {"stringValue": "9db4-325096b39f47"}},
+         {"key":"checksum","value": {"stringValue": "120EA8A25E5D487BF68B5F7096440019"}},
+         {"key":"count","value": {"intValue": 3}}
+       ] 
+     },
+     "spans": [
+     { // 1. A successful search/discovery call from the seeker (BAP)
+      "name": "search",
+      "traceId": "d4ae9294-ab00-11ee-9db4-325096b39f47",
+      "spanId": "d4ae99ec-ab00-11ee-be29-325096b39f47",
+      "startTimeUnixNano": "1544712660000000000",
+      "endTimeUnixNano": "1544712661000000000",
+      "status": "Ok",
+      "attributes": [
+        {"key":"span_uuid","value": {"stringValue": "3fae2d5f-3cfb-4e6e-b6a2-0ee5d6579832"}},
+        {"key":"observedTimeUnixNano","value": {"stringValue": "1581452772000000321"}},
+        {"key":"sender.id","value": {"stringValue": "np1"}},
+        {"key":"recipient.id","value": {"stringValue": "gateway1"}},
+        {"key":"http.method","value": {"stringValue": "POST"}},
+        {"key":"http.route","value": {"stringValue": "/search"}},
+        {"key":"http.host","value": {"stringValue": "api.gateway.com"}},
+        {"key":"http.status.code","value": {"stringValue": "200"}}
+      ],
+      "events": [ // Custom data
+        {
+          "name": "request_info",
+          "time": "2023-04-29T18:52:58.114561Z",
+          "attributes": [
+            {"key":"reqBody","value": {"stringValue": "{\"context\":{},\"message\":{}}"}},
+            {"key":"deviceid","value": {"stringValue": "9db4-325096b39f47"}}
+          ]
+        }
+      ]
+     },
+     { // 2. A success on_search (discovery result) call from the provider (BPP)
+      "name": "on_search",
+      "traceId": "d4ae9294-ab00-11ee-9db4-325096b39f47",
+      "spanId": "d4ae99ec-ab00-11ee-be29-325096b39f48",
+      "startTimeUnixNano": "1544712660000000000",
+      "endTimeUnixNano": "1544712661590000000",
+      "status": "Ok",
+      "attributes": [
+        {"key":"span_uuid","value": {"stringValue": "2eds2d5f-3cfb-4e6e-b6a2-0ee5d6523898"}},
+        {"key":"observedTimeUnixNano","value": {"stringValue": "1581452772000000321"}},
+        {"key":"sender.id","value": {"stringValue": "np2"}},
+        {"key":"recipient.id","value": {"stringValue": "np1"}},
+        {"key":"http.method","value": {"stringValue": "POST"}},
+        {"key":"http.route","value": {"stringValue": "/on_search"}},
+        {"key":"http.host","value": {"stringValue": "api.np1.com"}},
+        {"key":"http.status.code","value": {"stringValue": "200"}}
+      ],
+      "events": [ // Custom data
+        {
+          "name": "response_info",
+          "time": "2023-04-29T18:52:58.114561Z",
+          "attributes": [
+            {"key":"resBody","value": {"stringValue": "{\"context\":{},\"message\":{\"catalog\":[]}}"}}
+          ]
+        }
+      ]
+     },
+     { // 3. A failed on_search (discovery result) call from the provider (BPP)
+      "name": "on_search",
+      "traceId": "d4ae9294-ab00-11ee-9db4-325096b39f47",
+      "spanId": "d4ae99ec-ab00-11ee-be29-325096b39f49",
+      "startTimeUnixNano": "1544712660000000000",
+      "endTimeUnixNano": "1544712671230000000",
+      "status": "Ok",
+      "attributes": [
+        {"key":"span_uuid","value": {"stringValue": "43kr3d5f-3cfb-4e6e-b6a2-0ee5d6508923"}},
+        {"key":"observedTimeUnixNano","value": {"stringValue": "1581452772000000321"}},
+        {"key":"sender.id","value": {"stringValue": "np3"}},
+        {"key":"recipient.id","value": {"stringValue": "np1"}},
+        {"key":"http.method","value": {"stringValue": "POST"}},
+        {"key":"http.route","value": {"stringValue": "/on_search"}},
+        {"key":"http.host","value": {"stringValue": "api.np1.com"}},
+        {"key":"http.status.code","value": {"stringValue": "500"}}
+      ],
+      "events": [ // Custom data
+        {
+          "name": "error",
+          "time": "2023-04-29T18:52:58.114561Z",
+          "attributes": [
+            {"key":"type","value": {"stringValue": "CORE-ERROR"}},
+            {"key":"code","value": {"stringValue": "ERR_BPP_1010"}},
+            {"key":"msg","value": {"stringValue": "Unable to fetch the catalog. Please try later"}}
+          ]
+        }
+      ]
+     }
+     ]
+   }]
+ }]
+}
+```
+
+### METRIC
+Metric event is used by Network participants to share business metrics data with the network facilitator/manager. 
+
+We will be using the OTel “Metric” signal to capture the Metric event. For the OTel metric signal, the metric is segregated into different aggregation types - Sum, Gauge, Histogram. And within sum it can be monotonic or non-monotonic. Since the metric event is expected to capture business metrics, we would use only the “sum” aggregation and non-monotonic only in the current version of network telemetry specification.
+
+Following is the overall structure:
+
+
+```scala
+{
+ "resourceMetrics": [{
+   "resource": { // Required. Contextual information as per envelope structure
+     Attribute("eid", String), // Required. Event ID - must be METRIC for all metric events
+     Attribute("producer", String), // Required. Identifier of the system that produced this event
+     Attribute("domain", String), // Required. Domain where the event has occurred.
+   }, 
+   "scopeSpans": [{
+     "scope": { // Optional. Contextual information as per envelope structure
+       "name": String, 
+       "version": String, 
+       "attributes": [
+         Attribute("scope_uuid", String), // Optional. unique id for the batch for idempotency
+         Attribute("checksum", String), // Optional. checksum to enable tampering checks
+         Attribute("count", String), // Optional. Total count of spans in this batch 
+         Attribute("schema_url", String), // Optional. Schema URL for schema validation
+       ]
+     },
+     "metrics": [{ // Required. One or more METRIC events in detail
+       "name": String, // Required. Metric name
+       "unit": String, // Required. Type of metrics stream unit. Common unit types are:
+            // Count: Represents a simple count of events or entities. The unit for count is "1"
+            // Seconds: Represents a duration or time interval. The unit is "s" or "seconds"
+            // Bytes: Represents data size. The unit is typically "B" or "bytes."
+            // Percent: Represents a ratio multiplied by 100. The unit is "%"
+            // Milliseconds: Represents a duration in milliseconds. The unit is "ms" or "milliseconds"
+       "description": String, // Optional. The metric streams description
+       "sum": { // Required. The metric data type
+         "aggregationTemporality": Int, // Required. One of 1 or 2. 1 - delta and 2 is cumulative
+         "isMonotonic": Boolean, // Optional. Defaults to false
+         "dataPoints": [{
+           "asDouble": Double, // Required. The metric value in double
+           "startTimeUnixNano": String, // Required. Start time of the sum time window
+           "endTimeUnixNano": String, // Required. End time of the the sum time window
+           "attributes": [ // Required. Attributes providing additional details about the metric
+             Attribute("metric_uuid", String), // Required. Unique identifier for this metric record
+             Attribute("observedTimeUnixNano", String), // Required. Event generated time as ISO datetime
+             Attribute("metric.code", String), // Required. Code of the metric as defined in the metrics registry
+             Attribute("metric.category", String), // Optional. metric category or type. 
+             Attribute("metric.label", String), // Optional. metric label/display name. 
+             Attribute("metric.granularity", String), // Optional. Metric granularity - Hour/Week/Day etc
+             Attribute("metric.frequency", String), // Optional.Metric computation frequency-hr/day/week etc
+           ]
+         }]
+       }
+     }]
+   }]
+ }]
+}
+```
+
+#### Example
+
+```scala
+{
+ "resourceMetrics": [{
+   "resource": { 
+     "attributes": [
+       {"key": "eid", "value": {"stringValue": "METRIC"}},
+       {"key": "producer", "value": {"stringValue": "bap-1234"}},
+       {"key": "domain", "value": {"stringValue": "Retail"}}
+     ]
+   }, 
+   "scopeMetrics": [{
+     "scope": {
+       "name": "metrics_service",
+       "version": "1.0",
+       "attributes": [
+         {"key":"scope_uuid","value": {"stringValue": "9db4-325096b39f47"}},
+         {"key":"checksum","value": {"stringValue": "120EA8A25E5D487BF68B5F7096440019"}},
+         {"key":"count","value": {"intValue": 3}}
+       ] 
+     },
+     "metrics": [
+     { // 1. Number of on_search API calls in a day
+      "name": "search_api_total_count",
+      "unit": "1",
+      "sum": {
+        "aggregationTemporality": 1,
+        "isMonotonic": false,
+        "dataPoints": [{
+          "asDouble": 15699,
+          "startTimeUnixNano": "1544712660000000000",
+          "endTimeUnixNano": "1544712661590000000",
+          "attributes": [
+            {"key":"metric_uuid","value": {"stringValue": "43kr3d5f-3cfb-4e6e-b6a2-0ee5d6508923"}},
+            {"key":"observedTimeUnixNano","value": {"stringValue": "1581452772000000321"}},
+            {"key":"metric.code","value": {"stringValue": "search_api_total_count"}},
+            {"key":"metric.category","value": {"stringValue": "Discovery"}},
+            {"key":"metric.label","value": {"stringValue": "Discovery Total Calls"}},
+            {"key":"metric.granularity","value": {"stringValue": "day"}},
+            {"key":"metric.frequency","value": {"stringValue": "day"}},
+            {"key":"addlData.apiid","value": {"stringValue": "search"}} // Custom attribute
+          ]
+        }]
+      }
+     },
+     { // 2. Average response time for all API calls in an hour
+      "name": "avg_api_response_time",
+      "unit": "1",
+      "sum": {
+        "aggregationTemporality": 1,
+        "isMonotonic": false,
+        "dataPoints": [{
+          "asDouble": 1211,
+          "startTimeUnixNano": "1544712660000000000",
+          "endTimeUnixNano": "1544712661590000000",
+          "attributes": [
+            {"key":"metric_uuid","value": {"stringValue": "9rie3d5f-3cfb-4e6e-b6a2-0ee5d639822"}},
+            {"key":"observedTimeUnixNano","value": {"stringValue": "1581452772000000321"}},
+            {"key":"metric.code","value": {"stringValue": "avg_api_response_time"}},
+            {"key":"metric.category","value": {"stringValue": "NetworkHealth"}},
+            {"key":"metric.label","value": {"stringValue": "Network Performance"}},
+            {"key":"metric.granularity","value": {"stringValue": "hour"}},
+            {"key":"metric.frequency","value": {"stringValue": "day"}}
+          ]
+        }]
+      }
+     },
+     { // 3. Average response time for on_search API calls in a day
+      "name": "search_api_failure_percent",
+      "unit": "%",
+      "sum": {
+        "aggregationTemporality": 2,
+        "isMonotonic": false,
+        "dataPoints": [{
+          "asDouble": 2.3,
+          "startTimeUnixNano": "1544712660000000000",
+          "endTimeUnixNano": "1544712661590000000",
+          "attributes": [
+            {"key":"metric_uuid","value": {"stringValue": "93j3jd5f-3cfb-4e6e-b6a2-0ee5d6391221"}},
+            {"key":"observedTimeUnixNano","value": {"stringValue": "1581452772000000321"}},
+            {"key":"metric.code","value": {"stringValue": "search_api_failure_percent"}},
+            {"key":"metric.category","value": {"stringValue": "NetworkHealth"}},
+            {"key":"metric.label","value": {"stringValue": "Network Responsiveness"}},
+            {"key":"metric.granularity","value": {"stringValue": "day"}},
+            {"key":"metric.frequency","value": {"stringValue": "day"}}
+          ]
+        }]
+      }
+     }]
+   }]
+ }]
+}
+```
+
+### LOG
+
+Audit events are used by participants to communicate about updates and state changes of entities within the network. The entities include domain objects like order and consent, as well as the participants themselves. We will be using the OTel “Log” signal to capture the Audit event.
+
+Following is the overall structure for Log events:
+
+```scala
+{
+ "resourceLogs": [{
+   "resource": { // Required. Contextual information as per envelope structure
+     Attribute("eid", String), // Required. Event ID - must be AUDIT for all audit events
+     Attribute("producer", String), // Required. Identifier of the system that produced this event
+     Attribute("domain", String), // Required. Domain where the event has occurred.
+   }, 
+   "scopeLogs": [{
+     "scope": { // Optional. Contextual information as per envelope structure
+       "name": String, 
+       "version": String, 
+       "attributes": [
+         Attribute("scope_uuid", String), // Optional. unique id for the batch for idempotency
+         Attribute("checksum", String), // Optional. checksum to enable tampering checks
+         Attribute("count", String), // Optional. Total count of spans in this batch 
+         Attribute("schema_url", String), // Optional. Schema URL for schema validation
+       ]
+     },
+     "logRecords": [{ // Required. One or more LOG events in detail
+       "timeUnixNano": String, // Required. Time when the event occurred
+       "observedTimeUnixNano": String, // Optional.Time when the event was observed if different from occurred
+       "severityNumber": String, // Required. Default to 12
+       "traceId": String, // Optional. Correlate to any API event trace id
+       "spanId": String, // Optional. Correlate to any API event span id
+       "body": { // Required. Body of the log record as per OTEL protocol
+         "stringValue": String, // Required. Capture the description here
+       }
+       "attributes": [ // Required. Attributes providing additional details about the log record
+         Attribute("log_uuid", String), // Required. Unique identifier for this log record
+         Attribute("item.id", String), // Required. unique id for the object type
+         Attribute("item.type", String), // Required. Object Type. For ex: Order
+         Attribute("item.name", String), // Optional. Name of the object eg: Name of user, order or content
+         Attribute("item.code", String), // Optional. unique code for the object
+         Attribute("item.prevstate", String), // Required. Previous state
+         Attribute("item.state", String), // Required. Current state
+         Attribute("item.duration", String), // Optional. Duration for the state change in seconds
+       ]
+     }]
+   }]
+ }]
+}
+```
+
+#### Example
+
+```scala
+{
+ "resourceMetrics": [{
+   "resource": { 
+     "attributes": [
+       {"key": "eid", "value": {"stringValue": "AUDIT"}},
+       {"key": "producer", "value": {"stringValue": "bap-1234"}},
+       {"key": "domain", "value": {"stringValue": "Retail"}}
+     ]
+   }, 
+   "scopeLogs": [{
+     "scope": {
+       "name": "audit_service",
+       "version": "1.0",
+       "attributes": [
+         {"key":"scope_uuid","value": {"stringValue": "9db4-325096b39f47"}},
+         {"key":"checksum","value": {"stringValue": "120EA8A25E5D487BF68B5F7096440019"}},
+         {"key":"count","value": {"intValue": 6}}
+       ] 
+     },
+     "logRecords": [
+     { // 1. An item is selected and a draft order is sent
+      "timeUnixNano": "1581452772000000321",
+      "observedTimeUnixNano": "1581452772000000321",
+      "severityNumber": "12",
+      "body": {
+        "stringValue": "Item selected for order",
+      },
+      "attributes": [
+        {"key":"log_uuid","value": {"stringValue": "3j2j2d5f-3cfb-4e6e-b6a2-0ee5d6392182"}},
+        {"key":"item.id","value": {"stringValue": "order-9db4"}},
+        {"key":"item.type","value": {"stringValue": "Order"}},
+        {"key":"item.name","value": {"stringValue": "Order #9db4"}},
+        {"key":"item.code","value": {"stringValue": "CN12e312"}},
+        {"key":"item.prevstate","value": {"stringValue": "search"}},
+        {"key":"item.state","value": {"stringValue": "select"}},
+        {"key":"item.duration.seconds","value": {"intValue": 65}},
+        {"key":"addlData.orderdate","value": {"stringValue": "2024-01-01T00:00:00.000+05:30"}} // Custom attribute
+      ]
+     },
+     { // 2. An order is initiated
+      "timeUnixNano": "1581452772000000321",
+      "observedTimeUnixNano": "1581452772000000321",
+      "severityNumber": "12",
+      "body": {
+        "stringValue": "Order is initiated",
+      },
+      "attributes": [
+        {"key":"log_uuid","value": {"stringValue": "8422ud5f-3cfb-4e6e-b6a2-0ee5d6334722"}},
+        {"key":"item.id","value": {"stringValue": "order-9db4"}},
+        {"key":"item.type","value": {"stringValue": "Order"}},
+        {"key":"item.name","value": {"stringValue": "Order #9db4"}},
+        {"key":"item.code","value": {"stringValue": "item1234"}},
+        {"key":"item.prevstate","value": {"stringValue": "select"}},
+        {"key":"item.state","value": {"stringValue": "init"}},
+        {"key":"item.duration.seconds","value": {"intValue": 89}},
+        {"key":"addlData.initdate","value": {"stringValue": "2024-01-01T00:00:00.000+05:30"}}, // Custom attribute
+        {"key":"addlData.paymentRefNumber","value": {"stringValue": "b2aa-325096b39f47"}} // Custom attribute
+      ]
+     },
+     { // 3. An order is confirmed
+      "timeUnixNano": "1581452772000000321",
+      "observedTimeUnixNano": "1581452772000000321",
+      "severityNumber": "12",
+      "body": {
+        "stringValue": "Order confirmed",
+      },
+      "attributes": [
+        {"key":"log_uuid","value": {"stringValue": "8473sd5f-3cfb-4e6e-b6a2-0ee5d6847392"}},
+        {"key":"item.id","value": {"stringValue": "order-9db4"}},
+        {"key":"item.type","value": {"stringValue": "Order"}},
+        {"key":"item.name","value": {"stringValue": "Order #9db4"}},
+        {"key":"item.code","value": {"stringValue": "CN12e312"}},
+        {"key":"item.prevstate","value": {"stringValue": "init"}},
+        {"key":"item.state","value": {"stringValue": "confirm"}},
+        {"key":"item.duration.seconds","value": {"intValue": 2}}
+      ]
+     },
+     { // 4. An order is dispatched/fulfilled
+      "timeUnixNano": "1581452772000000321",
+      "observedTimeUnixNano": "1581452772000000321",
+      "severityNumber": "12",
+      "body": {
+        "stringValue": "Order is dispatched",
+      },
+      "attributes": [
+        {"key":"log_uuid","value": {"stringValue": "847s2d5f-3cfb-4e6e-b6a2-0ee5d6k29e92"}},
+        {"key":"item.id","value": {"stringValue": "order-9db4"}},
+        {"key":"item.type","value": {"stringValue": "Order"}},
+        {"key":"item.name","value": {"stringValue": "Order #9db4"}},
+        {"key":"item.code","value": {"stringValue": "CN12e312"}},
+        {"key":"item.prevstate","value": {"stringValue": "confirm"}},
+        {"key":"item.state","value": {"stringValue": "dispatch"}},
+        {"key":"item.duration.seconds","value": {"intValue": 172800}},
+        {"key":"addlData.dispatchDate","value": {"stringValue": "2024-01-01T00:00:00.000+05:30"}}, // Custom attribute
+        {"key":"addlData.deliveryRefNumber","value": {"stringValue": "325096b39f47"}} // Custom attribute
+      ]
+     },
+     { // 5. An order is rejected
+      "timeUnixNano": "1581452772000000321",
+      "observedTimeUnixNano": "1581452772000000321",
+      "severityNumber": "12",
+      "body": {
+        "stringValue": "Order is rejected",
+      },
+      "attributes": [
+        {"key":"log_uuid","value": {"stringValue": "8eu39d5f-3cfb-4e6e-b6a2-0ee5d6928889"}},
+        {"key":"item.id","value": {"stringValue": "order-9db4"}},
+        {"key":"item.type","value": {"stringValue": "Order"}},
+        {"key":"item.name","value": {"stringValue": "Order #9db4"}},
+        {"key":"item.code","value": {"stringValue": "CN12e312"}},
+        {"key":"item.prevstate","value": {"stringValue": "confirm"}},
+        {"key":"item.state","value": {"stringValue": "reject"}},
+        {"key":"item.duration.seconds","value": {"intValue": 21600}},
+        {"key":"addlData.rejectReason","value": {"stringValue": "item out of stock"}} // Custom attribute
+      ]
+     },
+     { // 6. A consent is revoked
+      "timeUnixNano": "1581452772000000321",
+      "observedTimeUnixNano": "1581452772000000321",
+      "severityNumber": "12",
+      "body": {
+        "stringValue": "Order confirmed",
+      },
+      "attributes": [
+        {"key":"log_uuid","value": {"stringValue": "ie92id5f-3cfb-4e6e-b6a2-0ee5d6738292"}},
+        {"key":"item.id","value": {"stringValue": "consent-9db4"}},
+        {"key":"item.type","value": {"stringValue": "Consent"}},
+        {"key":"item.prevstate","value": {"stringValue": "ACTIVE"}},
+        {"key":"item.state","value": {"stringValue": "REVOKED"}},
+        {"key":"item.duration.seconds","value": {"intValue": 21600}},
+        {"key":"addlData.consentMode","value": {"stringValue": "VIEW"}} // Custom attribute
+      ]
+     }
+     ]
+   }]
+ }]
+}
+```
