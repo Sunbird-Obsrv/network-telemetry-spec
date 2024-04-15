@@ -39,3 +39,187 @@ Following are the list of open telemetry signals a network participant has to ge
 - **TRACE** - Record API transaction events as a TRACE signal, which internally comprises a collection of SPANS, as per the OpenTelemetry protocol.
 - **METRIC** - Capture the business & operational metrics as the Open Telemetry’s METRIC signal. 
 - **LOG** - Collect all the audit logs within a network participant using the LOG signal.
+
+## Telemetry Envelope
+
+An event with a common envelope enables a standardized mechanism for network participants to share contextual (and dimensional) data about the events. 
+
+Adopting OpenTelemetry protocol, the following is the common structure for all telemetry events. The open telemetry structure by design is segregated for various signals and is inherently batchable.
+
+```json
+{
+  "resource<type>": [
+    {
+      "resource": {
+        "attributes": [
+          {
+            "key": "String",
+            "value": {}
+          }
+        ]
+      },
+      "scope<type>": [
+        {
+          "scope": {
+            "name": "String",
+            "version": "String",
+            "attributes": [
+              {
+                "key": "String",
+                "value": {}
+              }
+            ]
+          },
+          "<type>": []
+        }
+      ]
+    }
+  ]
+}
+```
+
+In the structure:
+
+- **`resource<type>`** is the top level element of an open telemetry signal
+- **`resource`** is to capture information about the signal, its producer and the context in which it is generated.
+- **`scope<type>`** is to capture one or more signals along with some metadata about the signals.
+- **`scope`** is used to capture the transport information and metadata about the signals. This information is intended only for transport & validity checks, without any impact on the actual data and its usage.
+- **`<type>`** is to capture one or more signals (of the same type) in detail.
+
+`<type>` value varies based on type of the SIGNAL being passed in the event:
+- For TRACE signals, the keys to be used are “resourceSpans”, “scopeSpans” and “spans”.
+- For METRIC signals, the keys to be used are “resourceMetrics”, “scopeMetrics” and “metrics”.
+- For LOG signals, the keys to be used are “resourceLogs”, “scopeLogs”, and “logRecords”.
+
+<img width="1033" alt="anatomy-otel-signals-open-networks" src="https://github.com/maheshkumargangula/network-telemetry-spec/assets/6985261/aea4c6a5-78e4-4ba6-8501-8d2515f6d2a9">
+
+
+The envelope of a TRACE signal will be as follows:
+
+```json
+{
+  "resourceSpans": [
+    {
+      "resource": { },
+      "scopeSpans": [
+        {
+          "scope": { },
+          "spans": []
+        }
+      ]
+    }
+  ]
+}
+```
+
+As per the network telemetry specification, “resource” section under the “resource<type>” should capture all contextual information about the telemetry event (i.e the open telemetry signal). While the “resource” attributes are unbounded by OTel spec, we will mandate few attributes as per network telemetry spec as shown below:
+
+```json
+"resource": {
+  "attributes": [
+    {
+      "key": "eid", // Required. Event ID - one of API/METRIC/AUDIT
+      "value": {"stringValue": "String"}
+    },
+    {
+      "key": "producer", // Required. Who has produced the event?
+      "value": {"stringValue": "String"}
+    },
+    {
+      "key": "domain", // Required. Domain where the event has occurred.
+      "value": {"stringValue": "String"} //Ex: Retail,FinancialAid,PersonalFinance,FinancialReporting etc 
+    },
+    {
+      "key": "<>", // Additional contextual attributes. A specific network may have additional required attributes.
+      "value": {"stringValue": "String"} 
+    }
+  ]
+}
+```
+
+As stated above, `"scope"` section under the `"scope<type>"` section will be used to provide optional transport information and metadata about the telemetry events.
+
+```json
+"scope": { // Optional
+  "name": "String", // Required. An identifier/name for the signals in this scope. For ex: service name
+  "version": "String", // Required. A version number of the network telemetry specification
+  "attributes": [ // Optional. Attributes that are common for all the signals in this envelope
+    {
+      "key": "scope_uuid", // Optional. Generate a unique id for the batch for idempotency
+      "value": {"stringValue": "String"}
+    },
+    {
+      "key": "checksum", // Optional. Generate a checksum to enable checks for tampering
+      "value": {"stringValue": "String"}
+    },
+    {
+      "key": "count", // Optional. Total count of spans, metrics or logs in this batch etc 
+      "value": {"stringValue": "String"}
+    },
+    {
+      "key": "schema_url", // Optional. Schema URL for schema validation
+      "value": {"stringValue": "String"} 
+    }
+  ]
+} 
+```
+
+### Example:
+
+Following is a sample telemetry envelope structure for an API event
+
+```json
+"resourceSpans": [
+  {
+    "resource": {
+      "attributes": [
+        {
+          "key": "eid",
+          "value": {"stringValue": "API"}
+        },
+        {
+          "key": "producer",
+          "value": {"stringValue": "bap-1234"}
+        },
+        {
+          "key": "domain",
+          "value": {"stringValue": "Retail"}
+        },
+        {
+          "key": "deviceid", // Custom attribute
+          "value": {"stringValue": "45ba-8f9f-6f8e756b7513"} 
+        },
+        {
+          "key": "useragent", // Custom attribute
+          "value": {"stringValue": "Mozilla/5.0 (Linux; Android 13; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Mobile Safari/537.36"} 
+        }
+      ]
+    },
+    "scopeSpans": [
+      {
+        "scope": {
+          "name": "discovery_service",
+          "version": "1.0",
+          "attributes": [
+            {
+              "key": "scope_uuid",
+              "value": {"stringValue": "9db4-325096b39f47"}
+            },
+            {
+              "key": "checksum",
+              "value": {"stringValue": "120EA8A25E5D487BF68B5F7096440019"}
+            },
+            {
+              "key": "count",
+              "value": {"stringValue": "3"}
+            }
+          ]
+        },
+        "spans": [
+            // list of span records
+        ]
+      }
+    ]
+  }
+]
+```
