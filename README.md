@@ -7,7 +7,7 @@ In the realm of Open Networks, telemetry (along with the resultant data) offers 
 This specification proposes a standardized telemetry specification for open, decentralized networks/protocols to enable network observability.
 
 ---
-### [Design Principles](details/design-principles.md)
-### [Open Telemetry Concepts - Primer](details/otel-concepts-primer.md)
-### [Telemetry Specification](details/otel-specification.md)
-### [Reference Implementation Design](details/ref-impl-design.md)
+### [Design Principles](docs/design-principles.md)
+### [Open Telemetry Concepts - Primer](docs/otel-concepts-primer.md)
+### [Telemetry Specification](docs/otel-specification.md)
+### [Reference Implementation Design](docs/ref-impl-design.md)
