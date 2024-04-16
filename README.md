@@ -1,4 +1,4 @@
-# Network Telemetry Specefication
+# Network Telemetry Specification
 
 ## Introduction
 
