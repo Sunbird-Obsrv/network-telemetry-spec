@@ -46,7 +46,7 @@ An event with a common envelope enables a standardized mechanism for network par
 
 Adopting OpenTelemetry protocol, the following is the common structure for all telemetry events. The open telemetry structure by design is segregated for various signals and is inherently batchable.
 
-```json
+```js
 {
   "resource<type>": [
     {
@@ -96,7 +96,7 @@ In the structure:
 
 The envelope of a TRACE signal will be as follows:
 
-```json
+```js
 {
   "resourceSpans": [
     {
@@ -114,7 +114,7 @@ The envelope of a TRACE signal will be as follows:
 
 As per the network telemetry specification, “resource” section under the “resource<type>” should capture all contextual information about the telemetry event (i.e the open telemetry signal). While the “resource” attributes are unbounded by OTel spec, we will mandate few attributes as per network telemetry spec as shown below:
 
-```json
+```js
 "resource": {
   "attributes": [
     {
@@ -139,7 +139,7 @@ As per the network telemetry specification, “resource” section under the “
 
 As stated above, `"scope"` section under the `"scope<type>"` section will be used to provide optional transport information and metadata about the telemetry events.
 
-```json
+```js
 "scope": { // Optional
   "name": "String", // Required. An identifier/name for the signals in this scope. For ex: service name
   "version": "String", // Required. A version number of the network telemetry specification
@@ -168,7 +168,7 @@ As stated above, `"scope"` section under the `"scope<type>"` section will be use
 
 Following is a sample telemetry envelope structure for an API event
 
-```json
+```js
 "resourceSpans": [
   {
     "resource": {
