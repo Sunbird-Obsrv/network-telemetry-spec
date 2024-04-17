@@ -447,7 +447,7 @@ Following is the overall structure:
      Attribute("producer", String), // Required. Identifier of the system that produced this event
      Attribute("domain", String), // Required. Domain where the event has occurred.
    }, 
-   "scopeSpans": [{
+   "scopeMetrics": [{
      "scope": { // Optional. Contextual information as per envelope structure
        "name": String, 
        "version": String, 
